@@ -1,0 +1,19 @@
+{
+  "name": "custom-script-manager",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "bun@1.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun packages/core/src/clean-bin.ts && turbo run build --force",
+    "clean": "bun packages/core/src/clean-bin.ts",
+    "new": "bun packages/core/src/new-package.ts",
+    "postinstall": "bun packages/core/src/setup.ts && bun run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "@types/bun": "latest"
+  }
+}

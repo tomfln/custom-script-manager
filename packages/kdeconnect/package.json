@@ -1,0 +1,7 @@
+{
+  "name": "kdeconnect",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bun build.ts"
+  }
+}
