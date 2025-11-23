@@ -61,10 +61,26 @@ if (command === 'list') {
     }
 
     console.log('Running bun install...')
-    await $`bun install`.cwd(rootDir)
+    const installProc = Bun.spawn(['bun', 'install'], {
+      cwd: rootDir,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
+    if ((await installProc.exited) !== 0) {
+      throw new Error('bun install failed')
+    }
 
     console.log('Running build...')
-    await $`bun run build`.cwd(rootDir)
+    const buildProc = Bun.spawn(['bun', 'run', 'build'], {
+      cwd: rootDir,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
+    if ((await buildProc.exited) !== 0) {
+      throw new Error('bun run build failed')
+    }
 
     console.log('Update complete.')
   } catch (error: any) {

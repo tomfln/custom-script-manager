@@ -1,3 +1,3 @@
-import { buildSubmodule, rustBuild } from '@csm/core'
+import { buildSubmodule, buildRust } from '@csm/core'
 
-await buildSubmodule(() => rustBuild('src', '{{packageName}}'))
+await buildSubmodule(() => buildRust('src', '{{packageName}}'))

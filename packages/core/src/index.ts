@@ -119,7 +119,7 @@ export async function buildSubmodule(builderFn: () => Promise<string>) {
  * @param binaryName - The name of the binary to look for in target/release.
  * @returns The path to the built binary.
  */
-export async function rustBuild(submoduleDir: string, binaryName?: string): Promise<string> {
+export async function buildRust(submoduleDir: string, binaryName?: string): Promise<string> {
   const cwd = resolve(process.cwd(), submoduleDir)
 
   if (!(await exists(join(cwd, 'Cargo.toml')))) {
@@ -145,7 +145,7 @@ export async function rustBuild(submoduleDir: string, binaryName?: string): Prom
     const exe = process.platform === 'win32' ? `${name}.exe` : name
     return join(targetDir, exe)
   } else {
-    throw new Error('binaryName is required for rustBuild (auto-detection not implemented)')
+    throw new Error('binaryName is required for buildRust (auto-detection not implemented)')
   }
 }
 

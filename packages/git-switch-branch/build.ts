@@ -1,3 +1,3 @@
-import { buildSubmodule, rustBuild } from '@csm/core'
+import { buildSubmodule, buildRust } from '@csm/core'
 
-await buildSubmodule(() => rustBuild('src', 'git-switch-branch'))
+await buildSubmodule(() => buildRust('src', 'git-switch-branch'))

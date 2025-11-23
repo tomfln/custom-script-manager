@@ -1,3 +1,6 @@
 [submodule "packages/git-switch-branch/src"]
 	path = packages/git-switch-branch/src
 	url = tomfln:tomfln/git-switch-branch
+[submodule "packages/serve/src"]
+	path = packages/serve/src
+	url = tomfln:tomfln/serve

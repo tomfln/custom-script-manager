@@ -3,7 +3,18 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "templates/**", "*.ts", "*.json", "*.rs", "Cargo.toml"],
+      "inputs": [
+        "src/**",
+        "!src/**/node_modules/**",
+        "!src/**/target/**",
+        "!src/**/dist/**",
+        "templates/**",
+        "*.ts",
+        "*.json",
+        "*.rs",
+        "Cargo.toml",
+        "pnpm-lock.yaml"
+      ],
       "outputs": []
     }
   }
