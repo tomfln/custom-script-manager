@@ -40,9 +40,17 @@ if (command === 'list') {
     files.forEach((file) => {
       const ext = extname(file)
       const name = basename(file, ext)
-      if (['.cmd', '.bat', '.exe', '.ps1'].includes(ext)) {
-        if (name !== 'csm') {
-          console.log(`- ${name}`)
+      if (process.platform === 'win32') {
+        if (['.cmd', '.bat', '.exe', '.ps1'].includes(ext)) {
+          if (name !== 'csm') {
+            console.log(`- ${name}`)
+          }
+        }
+      } else {
+        if (!['.cmd', '.bat', '.ps1'].includes(ext)) {
+           if (name !== 'csm') {
+             console.log(`- ${name}`)
+           }
         }
       }
     })

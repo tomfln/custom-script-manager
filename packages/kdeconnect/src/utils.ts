@@ -1,11 +1,14 @@
 import { exists } from 'fs/promises'
 import { join } from 'path'
-import { $ } from 'bun'
 import { loadEnv } from '@csm/core/src/env'
 
 await loadEnv()
 
 export async function getKdeConnectPath(): Promise<string> {
+  if (process.platform !== 'win32') {
+    return 'kdeconnect-cli'
+  }
+
   if (process.env.KDECONNECT_PATH) {
     const customPath = join(process.env.KDECONNECT_PATH, 'kdeconnect-cli.exe')
     if (await exists(customPath)) {

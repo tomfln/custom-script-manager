@@ -9,7 +9,13 @@ if (!(await exists(binDir))) {
   await mkdir(binDir, { recursive: true })
 }
 
-await copyFile(join(srcDir, 'csm.cmd'), join(binDir, 'csm.cmd'))
+if (process.platform === 'win32') {
+  await copyFile(join(srcDir, 'csm.cmd'), join(binDir, 'csm.cmd'))
+} else {
+  const dest = join(binDir, 'csm')
+  await copyFile(join(srcDir, 'csm.sh'), dest)
+  await Bun.$`chmod +x ${dest}`
+}
 
 await copyShellHelpers()
 

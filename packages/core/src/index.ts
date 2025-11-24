@@ -19,6 +19,8 @@ export async function ensureBin(): Promise<string> {
  * @param scriptName - The name of the batch script file (e.g., 'myscript.bat').
  */
 export async function buildBat(scriptName: string) {
+  if (process.platform !== 'win32') return
+
   const binDir = await ensureBin()
   const name = basename(scriptName, '.bat')
   const cmdPath = join(binDir, `${name}.cmd`)
@@ -40,6 +42,8 @@ call "%~dp0\\${relativeScriptPath}" %*
  * @param scriptName - The name of the PowerShell script file (e.g., 'myscript.ps1').
  */
 export async function buildPs1(scriptName: string) {
+  if (process.platform !== 'win32') return
+
   const binDir = await ensureBin()
   const name = basename(scriptName, '.ps1')
   const cmdPath = join(binDir, `${name}.cmd`)
@@ -64,18 +68,28 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "$Input | & '%~dp0\\${relativeS
 export async function buildTs(scriptName: string, commandName?: string) {
   const binDir = await ensureBin()
   const name = commandName || basename(scriptName, '.ts')
-  const cmdPath = join(binDir, `${name}.cmd`)
+  const pkgDirName = basename(process.cwd())
 
   console.log(`Creating launcher for ${scriptName} as ${name}...`)
 
-  const pkgDirName = basename(process.cwd())
-  const relativeScriptPath = `..\\packages\\${pkgDirName}\\${scriptName}`
-
-  const cmdContent = `@echo off
+  if (process.platform === 'win32') {
+    const cmdPath = join(binDir, `${name}.cmd`)
+    const relativeScriptPath = `..\\packages\\${pkgDirName}\\${scriptName}`
+    const cmdContent = `@echo off
 bun "%~dp0\\${relativeScriptPath}" %*
 `
-  await writeFile(cmdPath, cmdContent)
-  console.log(`Built ${name}`)
+    await writeFile(cmdPath, cmdContent)
+    console.log(`Built ${name}.cmd`)
+  } else {
+    const shPath = join(binDir, `${name}`)
+    const relativeScriptPath = `../packages/${pkgDirName}/${scriptName}`
+    const shContent = `#!/bin/sh
+bun "$(dirname "$0")/${relativeScriptPath}" "$@"
+`
+    await writeFile(shPath, shContent)
+    await $`chmod +x ${shPath}`
+    console.log(`Built ${name}`)
+  }
 }
 
 /**
@@ -156,7 +170,7 @@ export async function copyShellHelpers() {
   const binDir = await ensureBin()
   const shellDir = join(import.meta.dir, 'shell')
 
-  const files = ['csm.psm1', 'csm-env.bat']
+  const files = ['csm.psm1', 'csm-env.bat', 'csm-env.sh']
   for (const file of files) {
     const src = join(shellDir, file)
     let destName = file
@@ -166,6 +180,11 @@ export async function copyShellHelpers() {
     if (await exists(src)) {
       console.log(`Copying ${file} to bin/${destName}...`)
       await copyFile(src, dest)
+      if (file.endsWith('.sh')) {
+        if (process.platform !== 'win32') {
+          await $`chmod +x ${dest}`
+        }
+      }
     } else {
       console.warn(`Shell helper ${src} not found.`)
     }

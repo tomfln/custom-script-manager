@@ -3,6 +3,20 @@ import { join } from 'path'
 
 const binPath = join(process.cwd(), 'bin')
 
+if (process.platform !== 'win32') {
+  if (await exists(binPath)) {
+    console.log('Cleaning bin directory...')
+    const files = await readdir(binPath)
+    for (const file of files) {
+      await rm(join(binPath, file), { recursive: true, force: true })
+    }
+    console.log('Bin directory cleaned.')
+  } else {
+    await mkdir(binPath, { recursive: true })
+  }
+  process.exit(0)
+}
+
 async function deleteRecursive(path: string) {
   try {
     const stats = await lstat(path)
