@@ -25,10 +25,6 @@
       "name": "serve",
       "version": "1.0.0",
     },
-    "packages/test-env": {
-      "name": "test-env",
-      "version": "1.0.0",
-    },
   },
   "packages": {
     "@csm/core": ["@csm/core@workspace:packages/core"],
@@ -44,8 +40,6 @@
     "kdeconnect": ["kdeconnect@workspace:packages/kdeconnect"],
 
     "serve": ["serve@workspace:packages/serve"],
-
-    "test-env": ["test-env@workspace:packages/test-env"],
 
     "turbo": ["turbo@2.6.1", "", { "optionalDependencies": { "turbo-darwin-64": "2.6.1", "turbo-darwin-arm64": "2.6.1", "turbo-linux-64": "2.6.1", "turbo-linux-arm64": "2.6.1", "turbo-windows-64": "2.6.1", "turbo-windows-arm64": "2.6.1" }, "bin": "bin/turbo" }, "sha512-qBwXXuDT3rA53kbNafGbT5r++BrhRgx3sAo0cHoDAeG9g1ItTmUMgltz3Hy7Hazy1ODqNpR+C7QwqL6DYB52yA=="],
 
