@@ -1,4 +1,4 @@
-import { readdir } from 'fs/promises'
+import { readdir, readFile, writeFile, exists, rename, mkdir } from 'fs/promises'
 import { join, extname, basename, resolve } from 'path'
 import { $ } from 'bun'
 import { parseArgs } from 'util'
@@ -9,6 +9,9 @@ await loadEnv()
 
 const rootDir = resolve(import.meta.dir, '..', '..', '..')
 const binDir = join(rootDir, 'bin')
+const disabledDir = join(binDir, '.disabled')
+const configFile = join(rootDir, 'csm.config.json')
+const commandsFile = join(binDir, 'commands.json')
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -34,29 +37,145 @@ const { values, positionals } = parseArgs({
 
 const command = positionals[0]
 
+async function getDisabledCommands(): Promise<string[]> {
+  if (await exists(configFile)) {
+    try {
+      const config = JSON.parse(await readFile(configFile, 'utf-8'))
+      return config.disabled || []
+    } catch {}
+  }
+  return []
+}
+
+async function setDisabledCommands(disabled: string[]) {
+  let config: any = {}
+  if (await exists(configFile)) {
+    try {
+      config = JSON.parse(await readFile(configFile, 'utf-8'))
+    } catch {}
+  }
+  config.disabled = disabled
+  await writeFile(configFile, JSON.stringify(config, null, 2))
+}
+
+async function getCommandDescriptions(): Promise<Record<string, string>> {
+  if (await exists(commandsFile)) {
+    try {
+      return JSON.parse(await readFile(commandsFile, 'utf-8'))
+    } catch {}
+  }
+  return {}
+}
+
 if (command === 'list') {
   try {
-    const files = await readdir(binDir)
-    files.forEach((file) => {
-      const ext = extname(file)
-      const name = basename(file, ext)
-      if (process.platform === 'win32') {
-        if (['.cmd', '.bat', '.exe', '.ps1'].includes(ext)) {
-          if (name !== 'csm') {
-            console.log(`- ${name}`)
+    const descriptions = await getCommandDescriptions()
+    const disabled = await getDisabledCommands()
+    
+    const enabledFiles = await readdir(binDir).catch(() => [])
+    const disabledFiles = await readdir(disabledDir).catch(() => [])
+    
+    const allCommands = new Set<string>()
+    
+    const processFiles = (files: string[]) => {
+      files.forEach(file => {
+        const ext = extname(file)
+        const name = basename(file, ext)
+        if (name === 'csm' || name === 'commands' || name.startsWith('.')) return
+        
+        if (process.platform === 'win32') {
+          if (['.cmd', '.bat', '.exe', '.ps1'].includes(ext)) {
+            allCommands.add(name)
+          }
+        } else {
+          if (!['.cmd', '.bat', '.ps1', '.json'].includes(ext)) {
+             allCommands.add(name)
           }
         }
-      } else {
-        if (!['.cmd', '.bat', '.ps1'].includes(ext)) {
-           if (name !== 'csm') {
-             console.log(`- ${name}`)
-           }
-        }
-      }
+      })
+    }
+    
+    processFiles(enabledFiles)
+    processFiles(disabledFiles)
+    
+    const sorted = Array.from(allCommands).sort((a, b) => {
+      const aDisabled = disabled.includes(a)
+      const bDisabled = disabled.includes(b)
+      if (aDisabled === bDisabled) return a.localeCompare(b)
+      return aDisabled ? 1 : -1
     })
-    console.log('- csm (This manager)')
+    
+    console.log('Available commands:')
+    for (const cmd of sorted) {
+      const isDisabled = disabled.includes(cmd)
+      const desc = descriptions[cmd] || ''
+      const status = isDisabled ? '\x1b[90m(disabled)\x1b[0m' : ''
+      const nameColor = isDisabled ? '\x1b[90m' : '\x1b[36m'
+      const reset = '\x1b[0m'
+      
+      console.log(`  ${nameColor}${cmd.padEnd(20)}${reset} ${desc} ${status}`)
+    }
+    console.log(`  \x1b[36mcsm${' '.repeat(17)}\x1b[0m This manager`)
   } catch (e) {
     console.error('Could not list bin directory:', e)
+  }
+} else if (command === 'enable') {
+  const cmds = positionals.slice(1)
+  if (cmds.length === 0) {
+    console.error('Usage: csm enable <command> [command...]')
+    process.exit(1)
+  }
+  
+  const disabled = await getDisabledCommands()
+  const newDisabled = disabled.filter(c => !cmds.includes(c))
+  await setDisabledCommands(newDisabled)
+
+  if (await exists(disabledDir)) {
+    const files = await readdir(disabledDir)
+    for (const cmd of cmds) {
+      let found = false
+      for (const file of files) {
+        const ext = extname(file)
+        const name = basename(file, ext)
+        if (name === cmd) {
+           await rename(join(disabledDir, file), join(binDir, file))
+           found = true
+        }
+      }
+      if (found) console.log(`Enabled ${cmd}`)
+      else console.warn(`Command ${cmd} not found in disabled list (or files missing)`)
+    }
+  }
+} else if (command === 'disable') {
+  const cmds = positionals.slice(1)
+  if (cmds.length === 0) {
+    console.error('Usage: csm disable <command> [command...]')
+    process.exit(1)
+  }
+
+  const disabled = await getDisabledCommands()
+  const newDisabled = [...new Set([...disabled, ...cmds])]
+  await setDisabledCommands(newDisabled)
+
+  await mkdir(disabledDir, { recursive: true })
+  
+  const files = await readdir(binDir)
+  for (const cmd of cmds) {
+    if (cmd === 'csm') {
+      console.warn('Cannot disable csm')
+      continue
+    }
+    let found = false
+    for (const file of files) {
+      const ext = extname(file)
+      const name = basename(file, ext)
+      if (name === cmd) {
+        await rename(join(binDir, file), join(disabledDir, file))
+        found = true
+      }
+    }
+    if (found) console.log(`Disabled ${cmd}`)
+    else console.warn(`Command ${cmd} not found`)
   }
 } else if (command === 'update') {
   console.log('Updating custom-script-manager...')
@@ -76,18 +195,7 @@ if (command === 'list') {
       stderr: 'inherit',
     })
     if ((await installProc.exited) !== 0) {
-      throw new Error('bun install failed')
-    }
-
-    console.log('Running build...')
-    const buildProc = Bun.spawn(['bun', 'run', 'build'], {
-      cwd: rootDir,
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    })
-    if ((await buildProc.exited) !== 0) {
-      throw new Error('bun run build failed')
+      throw new Error('bun install & build failed')
     }
 
     console.log('Update complete.')
@@ -139,5 +247,7 @@ if (command === 'list') {
   console.log('  list      List available scripts')
   console.log('  update    Update the repository and rebuild')
   console.log('  new       Create a new package')
+  console.log('  enable    Enable a command')
+  console.log('  disable   Disable a command')
   console.log('  load-env  Output shell commands to load env vars')
 }

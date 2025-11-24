@@ -1,4 +1,4 @@
-import { mkdir, copyFile, writeFile, exists, readdir } from 'fs/promises'
+import { mkdir, copyFile, writeFile, exists, readdir, readFile } from 'fs/promises'
 import { join, basename, extname, resolve } from 'path'
 import { $ } from 'bun'
 
@@ -14,11 +14,30 @@ export async function ensureBin(): Promise<string> {
   return binDir
 }
 
+async function registerCommand(name: string, description: string) {
+  const binDir = await ensureBin()
+  const commandsFile = join(binDir, 'commands.json')
+  let commands: Record<string, string> = {}
+  
+  try {
+    if (await exists(commandsFile)) {
+      const content = await readFile(commandsFile, 'utf-8')
+      commands = JSON.parse(content)
+    }
+  } catch (e) {
+    // Ignore error, start fresh
+  }
+
+  commands[name] = description
+  await writeFile(commandsFile, JSON.stringify(commands, null, 2))
+}
+
 /**
  * Builds a wrapper for a Batch script.
  * @param scriptName - The name of the batch script file (e.g., 'myscript.bat').
+ * @param description - A short description of the command.
  */
-export async function buildBat(scriptName: string) {
+export async function buildBat(scriptName: string, description: string = '') {
   if (process.platform !== 'win32') return
 
   const binDir = await ensureBin()
@@ -34,14 +53,16 @@ export async function buildBat(scriptName: string) {
 call "%~dp0\\${relativeScriptPath}" %*
 `
   await writeFile(cmdPath, cmdContent)
+  await registerCommand(name, description)
   console.log(`Built ${name}`)
 }
 
 /**
  * Builds a wrapper for a PowerShell script.
  * @param scriptName - The name of the PowerShell script file (e.g., 'myscript.ps1').
+ * @param description - A short description of the command.
  */
-export async function buildPs1(scriptName: string) {
+export async function buildPs1(scriptName: string, description: string = '') {
   if (process.platform !== 'win32') return
 
   const binDir = await ensureBin()
@@ -57,6 +78,7 @@ export async function buildPs1(scriptName: string) {
 pwsh -NoProfile -ExecutionPolicy Bypass -Command "$Input | & '%~dp0\\${relativeScriptPath}' %*"
 `
   await writeFile(cmdPath, cmdContent)
+  await registerCommand(name, description)
   console.log(`Built ${name}`)
 }
 
@@ -64,8 +86,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "$Input | & '%~dp0\\${relativeS
  * Builds a wrapper for a TypeScript script (executed via Bun).
  * @param scriptName - The name of the TypeScript script file (e.g., 'index.ts').
  * @param commandName - Optional custom name for the command (defaults to script filename without extension).
+ * @param description - A short description of the command.
  */
-export async function buildTs(scriptName: string, commandName?: string) {
+export async function buildTs(scriptName: string, commandName?: string, description: string = '') {
   const binDir = await ensureBin()
   const name = commandName || basename(scriptName, '.ts')
   const pkgDirName = basename(process.cwd())
@@ -90,13 +113,15 @@ bun "$(dirname "$0")/${relativeScriptPath}" "$@"
     await $`chmod +x ${shPath}`
     console.log(`Built ${name}`)
   }
+  await registerCommand(name, description)
 }
 
 /**
  * Builds a submodule by running a builder function and copying the artifact.
  * @param builderFn - A function that builds the submodule and returns the path to the artifact.
+ * @param description - A short description of the command.
  */
-export async function buildSubmodule(builderFn: () => Promise<string>) {
+export async function buildSubmodule(builderFn: () => Promise<string>, description: string = '') {
   const binDir = await ensureBin()
 
   const srcDir = resolve(process.cwd(), 'src')
@@ -124,6 +149,10 @@ export async function buildSubmodule(builderFn: () => Promise<string>) {
 
   console.log(`Copying ${artifactName} to bin...`)
   await copyFile(artifactPath, destPath)
+  
+  const name = basename(artifactName, extname(artifactName))
+  await registerCommand(name, description)
+  
   console.log(`Built ${artifactName}`)
 }
 

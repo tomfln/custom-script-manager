@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run clean && turbo run build --force",
+    "build": "turbo run build --output-logs new-only",
     "clean": "bun packages/core/src/clean-bin.ts",
     "new": "bun packages/core/src/new-package.ts",
     "postinstall": "bun packages/core/src/setup.ts && bun run build"
