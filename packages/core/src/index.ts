@@ -218,4 +218,7 @@ export async function copyShellHelpers() {
       console.warn(`Shell helper ${src} not found.`)
     }
   }
+  
+  // Register csm-load-env command
+  await registerCommand('csm-load-env', 'Load environment variables into shell')
 }

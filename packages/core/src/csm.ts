@@ -98,24 +98,55 @@ if (command === 'list') {
     processFiles(enabledFiles)
     processFiles(disabledFiles)
     
-    const sorted = Array.from(allCommands).sort((a, b) => {
-      const aDisabled = disabled.includes(a)
-      const bDisabled = disabled.includes(b)
-      if (aDisabled === bDisabled) return a.localeCompare(b)
-      return aDisabled ? 1 : -1
-    })
+    // Categorize commands
+    const csmCommands = ['csm-load-env', 'csm-env']
+    const customCommands: string[] = []
+    const csmRelated: string[] = []
+    const disabledCommands: string[] = []
     
-    console.log('Available commands:')
-    for (const cmd of sorted) {
-      const isDisabled = disabled.includes(cmd)
-      const desc = descriptions[cmd] || ''
-      const status = isDisabled ? '\x1b[90m(disabled)\x1b[0m' : ''
-      const nameColor = isDisabled ? '\x1b[90m' : '\x1b[36m'
-      const reset = '\x1b[0m'
-      
-      console.log(`  ${nameColor}${cmd.padEnd(20)}${reset} ${desc} ${status}`)
+    for (const cmd of allCommands) {
+      if (disabled.includes(cmd)) {
+        disabledCommands.push(cmd)
+      } else if (csmCommands.includes(cmd) || cmd.startsWith('csm-')) {
+        csmRelated.push(cmd)
+      } else {
+        customCommands.push(cmd)
+      }
     }
-    console.log(`  \x1b[36mcsm${' '.repeat(17)}\x1b[0m This manager`)
+    
+    customCommands.sort()
+    csmRelated.sort()
+    disabledCommands.sort()
+    
+    // Print custom commands
+    if (customCommands.length > 0) {
+      console.log('\x1b[1m\x1b[32mCustom Commands:\x1b[0m')
+      for (const cmd of customCommands) {
+        const desc = descriptions[cmd] || ''
+        console.log(`  \x1b[36m${cmd.padEnd(20)}\x1b[0m ${desc}`)
+      }
+    }
+    
+    // Print CSM-related commands
+    if (csmRelated.length > 0) {
+      console.log()
+      console.log('\x1b[1m\x1b[33mCSM Commands:\x1b[0m')
+      for (const cmd of csmRelated) {
+        const desc = descriptions[cmd] || ''
+        console.log(`  \x1b[33m${cmd.padEnd(20)}\x1b[0m ${desc}`)
+      }
+      console.log(`  \x1b[33mcsm${' '.repeat(17)}\x1b[0m This manager`)
+    }
+    
+    // Print disabled commands
+    if (disabledCommands.length > 0) {
+      console.log()
+      console.log('\x1b[1m\x1b[90mDisabled Commands:\x1b[0m')
+      for (const cmd of disabledCommands) {
+        const desc = descriptions[cmd] || ''
+        console.log(`  \x1b[90m${cmd.padEnd(20)} ${desc} (disabled)\x1b[0m`)
+      }
+    }
   } catch (e) {
     console.error('Could not list bin directory:', e)
   }
