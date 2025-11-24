@@ -1,6 +1,7 @@
 import { mkdir, copyFile, writeFile, exists, readdir, readFile } from 'fs/promises'
 import { join, basename, extname, resolve } from 'path'
 import { $ } from 'bun'
+import { log } from './logger'
 
 /**
  * Ensures the bin directory exists.
@@ -44,7 +45,7 @@ export async function buildBat(scriptName: string, description: string = '') {
   const name = basename(scriptName, '.bat')
   const cmdPath = join(binDir, `${name}.cmd`)
 
-  console.log(`Creating launcher for ${scriptName} as ${name}...`)
+  log.info(`Creating launcher for ${scriptName} as ${name}...`)
 
   const pkgDirName = basename(process.cwd())
   const relativeScriptPath = `..\\packages\\${pkgDirName}\\${scriptName}`
@@ -54,7 +55,7 @@ call "%~dp0\\${relativeScriptPath}" %*
 `
   await writeFile(cmdPath, cmdContent)
   await registerCommand(name, description)
-  console.log(`Built ${name}`)
+  log.success(`Built ${name}`)
 }
 
 /**
@@ -69,7 +70,7 @@ export async function buildPs1(scriptName: string, description: string = '') {
   const name = basename(scriptName, '.ps1')
   const cmdPath = join(binDir, `${name}.cmd`)
 
-  console.log(`Creating launcher for ${scriptName} as ${name}...`)
+  log.info(`Creating launcher for ${scriptName} as ${name}...`)
 
   const pkgDirName = basename(process.cwd())
   const relativeScriptPath = `..\\packages\\${pkgDirName}\\${scriptName}`
@@ -79,7 +80,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -Command "$Input | & '%~dp0\\${relativeS
 `
   await writeFile(cmdPath, cmdContent)
   await registerCommand(name, description)
-  console.log(`Built ${name}`)
+  log.success(`Built ${name}`)
 }
 
 /**
@@ -93,7 +94,7 @@ export async function buildTs(scriptName: string, commandName?: string, descript
   const name = commandName || basename(scriptName, '.ts')
   const pkgDirName = basename(process.cwd())
 
-  console.log(`Creating launcher for ${scriptName} as ${name}...`)
+  log.info(`Creating launcher for ${scriptName} as ${name}...`)
 
   if (process.platform === 'win32') {
     const cmdPath = join(binDir, `${name}.cmd`)
@@ -102,7 +103,7 @@ export async function buildTs(scriptName: string, commandName?: string, descript
 bun "%~dp0\\${relativeScriptPath}" %*
 `
     await writeFile(cmdPath, cmdContent)
-    console.log(`Built ${name}.cmd`)
+    log.success(`Built ${name}.cmd`)
   } else {
     const shPath = join(binDir, `${name}`)
     const relativeScriptPath = `../packages/${pkgDirName}/${scriptName}`
@@ -111,7 +112,7 @@ bun "$(dirname "$0")/${relativeScriptPath}" "$@"
 `
     await writeFile(shPath, shContent)
     await $`chmod +x ${shPath}`
-    console.log(`Built ${name}`)
+    log.success(`Built ${name}`)
   }
   await registerCommand(name, description)
 }
@@ -128,7 +129,7 @@ export async function buildSubmodule(builderFn: () => Promise<string>, descripti
   if (await exists(srcDir)) {
     const files = await readdir(srcDir)
     if (files.length === 0) {
-      console.log("Submodule directory 'src' is empty. Initializing submodule...")
+      log.info("Submodule directory 'src' is empty. Initializing submodule...")
       try {
         await $`git submodule update --init --recursive`.cwd(process.cwd())
       } catch (e) {
@@ -137,7 +138,7 @@ export async function buildSubmodule(builderFn: () => Promise<string>, descripti
     }
   }
 
-  console.log('Building submodule...')
+  log.info('Building submodule...')
   const artifactPath = await builderFn()
 
   if (!(await exists(artifactPath))) {
@@ -147,13 +148,13 @@ export async function buildSubmodule(builderFn: () => Promise<string>, descripti
   const artifactName = basename(artifactPath)
   const destPath = join(binDir, artifactName)
 
-  console.log(`Copying ${artifactName} to bin...`)
+  log.info(`Copying ${artifactName} to bin...`)
   await copyFile(artifactPath, destPath)
   
   const name = basename(artifactName, extname(artifactName))
   await registerCommand(name, description)
   
-  console.log(`Built ${artifactName}`)
+  log.success(`Built ${artifactName}`)
 }
 
 /**
@@ -166,11 +167,11 @@ export async function buildRust(submoduleDir: string, binaryName?: string): Prom
   const cwd = resolve(process.cwd(), submoduleDir)
 
   if (!(await exists(join(cwd, 'Cargo.toml')))) {
-    console.warn(`No Cargo.toml found in ${cwd}. Skipping build.`)
+    log.warn(`No Cargo.toml found in ${cwd}. Skipping build.`)
     throw new Error(`No Cargo.toml found in ${cwd}`)
   }
 
-  console.log(`Running cargo build in ${cwd}...`)
+  log.info(`Running cargo build in ${cwd}...`)
   try {
     await $`cargo build --release`.cwd(cwd)
   } catch (e) {
@@ -207,7 +208,7 @@ export async function copyShellHelpers() {
 
     const dest = join(binDir, destName)
     if (await exists(src)) {
-      console.log(`Copying ${file} to bin/${destName}...`)
+      log.info(`Copying ${file} to bin/${destName}...`)
       await copyFile(src, dest)
       if (file.endsWith('.sh')) {
         if (process.platform !== 'win32') {
@@ -215,7 +216,7 @@ export async function copyShellHelpers() {
         }
       }
     } else {
-      console.warn(`Shell helper ${src} not found.`)
+      log.warn(`Shell helper ${src} not found.`)
     }
   }
   

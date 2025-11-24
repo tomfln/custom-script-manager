@@ -4,6 +4,7 @@ import { $ } from 'bun'
 import { parseArgs } from 'util'
 import { createPackage } from './new-package'
 import { loadEnv, parseEnv } from './env'
+import { log } from './logger'
 
 await loadEnv()
 
@@ -148,12 +149,13 @@ if (command === 'list') {
       }
     }
   } catch (e) {
-    console.error('Could not list bin directory:', e)
+    log.error('Could not list bin directory:')
+    console.error(e)
   }
 } else if (command === 'enable') {
   const cmds = positionals.slice(1)
   if (cmds.length === 0) {
-    console.error('Usage: csm enable <command> [command...]')
+    log.error('Usage: csm enable <command> [command...]')
     process.exit(1)
   }
   
@@ -173,14 +175,14 @@ if (command === 'list') {
            found = true
         }
       }
-      if (found) console.log(`Enabled ${cmd}`)
-      else console.warn(`Command ${cmd} not found in disabled list (or files missing)`)
+      if (found) log.success(`Enabled ${cmd}`)
+      else log.warn(`Command ${cmd} not found in disabled list (or files missing)`)
     }
   }
 } else if (command === 'disable') {
   const cmds = positionals.slice(1)
   if (cmds.length === 0) {
-    console.error('Usage: csm disable <command> [command...]')
+    log.error('Usage: csm disable <command> [command...]')
     process.exit(1)
   }
 
@@ -193,7 +195,7 @@ if (command === 'list') {
   const files = await readdir(binDir)
   for (const cmd of cmds) {
     if (cmd === 'csm') {
-      console.warn('Cannot disable csm')
+      log.warn('Cannot disable csm')
       continue
     }
     let found = false
@@ -205,49 +207,60 @@ if (command === 'list') {
         found = true
       }
     }
-    if (found) console.log(`Disabled ${cmd}`)
-    else console.warn(`Command ${cmd} not found`)
+    if (found) log.success(`Disabled ${cmd}`)
+    else log.warn(`Command ${cmd} not found`)
   }
 } else if (command === 'update') {
-  console.log('Updating custom-script-manager...')
+  log.info('Updating custom-script-manager...')
   try {
-    console.log('Running git pull...')
+    log.info('Running git pull...')
     try {
       await $`git pull`.cwd(rootDir)
     } catch (e: any) {
-      console.warn('Skipped git pull, reason:', e.message)
+      log.warn(`Skipped git pull, reason: ${e.message}`)
     }
 
-    console.log('Running bun install...')
-    const installProc = Bun.spawn(['bun', 'install'], {
+    log.info('Running bun install...')
+    const installProc = Bun.spawn(['bun', 'install', '--ignore-scripts'], {
       cwd: rootDir,
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
     })
     if ((await installProc.exited) !== 0) {
-      throw new Error('bun install & build failed')
+      throw new Error('bun install failed')
     }
 
-    console.log('Update complete.')
+    log.info('Building packages...')
+    const buildProc = Bun.spawn(['bun', 'run', 'build'], {
+      cwd: rootDir,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
+    if ((await buildProc.exited) !== 0) {
+      throw new Error('bun run build failed')
+    }
+
+    log.success('Update complete.')
   } catch (error: any) {
-    console.error('Update failed:', error.message)
+    log.error(`Update failed: ${error.message}`)
     process.exit(1)
   }
 } else if (command === 'new') {
   const packageName = positionals[1]
 
   if (!packageName) {
-    console.error('Please provide a package name.')
-    console.error('Usage: csm new <name> [-t <type>] [--url <url>]')
-    console.error('       csm new <name> --submodule <url>')
+    log.error('Please provide a package name.')
+    log.error('Usage: csm new <name> [-t <type>] [--url <url>]')
+    log.error('       csm new <name> --submodule <url>')
     process.exit(1)
   }
 
   try {
     await createPackage(packageName, values)
   } catch (e: any) {
-    console.error(e.message)
+    log.error(e.message)
     process.exit(1)
   }
 } else if (command === 'load-env') {
@@ -269,7 +282,7 @@ if (command === 'list') {
       console.log(`export ${key}='${escapedVal}'`)
     }
   } else {
-    console.error(`Unknown shell: ${shell}`)
+    log.error(`Unknown shell: ${shell}`)
     process.exit(1)
   }
 } else {

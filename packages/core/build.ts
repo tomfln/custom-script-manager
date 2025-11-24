@@ -1,6 +1,7 @@
 import { copyFile, mkdir, exists } from 'fs/promises'
 import { join } from 'path'
 import { copyShellHelpers } from './src/index'
+import { log } from './src/logger'
 
 const srcDir = join(import.meta.dir, 'src')
 const binDir = join(import.meta.dir, '..', '..', 'bin')
@@ -19,4 +20,4 @@ if (process.platform === 'win32') {
 
 await copyShellHelpers()
 
-console.log('csm-core built successfully.')
+log.success('csm-core built successfully.')

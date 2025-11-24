@@ -1,5 +1,6 @@
 import { copyFile, exists } from "fs/promises";
 import { join, resolve } from "path";
+import { log } from "./logger";
 
 async function setup() {
     const rootDir = resolve(import.meta.dir, '..', '..', '..');
@@ -8,14 +9,14 @@ async function setup() {
 
     if (!await exists(envPath)) {
         if (await exists(envExamplePath)) {
-            console.log("Creating .env from .env.example...");
+            log.info("Creating .env from .env.example...");
             await copyFile(envExamplePath, envPath);
-            console.log(".env created. Please edit it with your configuration.");
+            log.success(".env created. Please edit it with your configuration.");
         } else {
-            console.warn(".env.example not found. Skipping .env creation.");
+            log.warn(".env.example not found. Skipping .env creation.");
         }
     } else {
-        console.log(".env already exists.");
+        log.info(".env already exists.");
     }
 }
 
