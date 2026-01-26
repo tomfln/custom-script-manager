@@ -15,5 +15,8 @@
   "devDependencies": {
     "turbo": "^2.0.0",
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.2.0"
   }
 }

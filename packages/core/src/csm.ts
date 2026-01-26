@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile, exists, rename, mkdir } from 'fs/promises
 import { join, extname, basename, resolve } from 'path'
 import { $ } from 'bun'
 import { parseArgs } from 'util'
-import { createPackage } from './new-package'
+import { createPackage, runInteractiveWizard, promptOpenEditor } from './new-package'
 import { loadEnv, parseEnv } from './env'
 import { log } from './logger'
 
@@ -22,14 +22,16 @@ const { values, positionals } = parseArgs({
       short: 't',
       default: 'ts',
     },
-    url: {
-      type: 'string',
-    },
     submodule: {
       type: 'string',
     },
     shell: {
       type: 'string',
+    },
+    help: {
+      type: 'boolean',
+      short: 'h',
+      default: false,
     },
   },
   strict: true,
@@ -248,17 +250,57 @@ if (command === 'list') {
     process.exit(1)
   }
 } else if (command === 'new') {
-  const packageName = positionals[1]
+  if (values.help) {
+    console.log('Usage: csm new [name] [-t <type>] [--submodule <url>]')
+    console.log('')
+    console.log('Create a new package. If no name is provided, an interactive wizard will run.')
+    console.log('')
+    console.log('Options:')
+    console.log('  -t, --type <type>      Package type: ts, rust, ps1, bat (default: ts)')
+    console.log('  --submodule <url>      Create from a git submodule')
+    console.log('  -h, --help             Show this help message')
+    console.log('')
+    console.log('Examples:')
+    console.log('  csm new my-tool                    Create a TypeScript package')
+    console.log('  csm new my-cli -t rust             Create a Rust package')
+    console.log('  csm new my-lib --submodule <url>   Import a git repository')
+    console.log('  csm new                            Run interactive wizard')
+    process.exit(0)
+  }
 
-  if (!packageName) {
-    log.error('Please provide a package name.')
-    log.error('Usage: csm new <name> [-t <type>] [--url <url>]')
-    log.error('       csm new <name> --submodule <url>')
-    process.exit(1)
+  let packageName = positionals[1]
+  let options = values
+
+  // Check if type is fully defined (either -t was provided or --submodule was provided)
+  const typeFullyDefined = values.type !== 'ts' || values.submodule !== undefined
+  // Also check if user explicitly passed -t ts (by checking raw args)
+  const explicitlyTyped = Bun.argv.some(arg => arg === '-t' || arg.startsWith('--type') || arg.startsWith('--submodule'))
+  
+  // Run wizard if no package name OR if type was not explicitly provided
+  if (!packageName || !explicitlyTyped) {
+    try {
+      const wizard = await runInteractiveWizard(packageName)
+      packageName = wizard.packageName
+      options = {
+        ...values,
+        type: wizard.type,
+        submodule: wizard.submoduleUrl,
+      }
+    } catch (e: any) {
+      // User cancelled (Ctrl+C)
+      if (e.name === 'ExitPromptError') {
+        process.exit(0)
+      }
+      throw e
+    }
   }
 
   try {
-    await createPackage(packageName, values)
+    const result = await createPackage(packageName, options)
+    // If the user explicitly provided -t or --submodule, skip the editor prompt
+    if (!explicitlyTyped) {
+      await promptOpenEditor(result)
+    }
   } catch (e: any) {
     log.error(e.message)
     process.exit(1)

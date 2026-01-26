@@ -2,20 +2,39 @@ import { mkdir, writeFile, readFile } from 'fs/promises'
 import { join, resolve } from 'path'
 import { parseArgs } from 'util'
 import { $ } from 'bun'
+import { input, select, confirm } from '@inquirer/prompts'
+
+export type PackageType = 'ts' | 'rust' | 'ps1' | 'bat' | 'submodule'
+
+export const PACKAGE_TYPES: { value: PackageType; name: string; description: string }[] = [
+  { value: 'ts', name: 'TypeScript', description: 'A TypeScript command compiled with Bun' },
+  { value: 'rust', name: 'Rust', description: 'A Rust command compiled with Cargo' },
+  { value: 'ps1', name: 'PowerShell', description: 'A PowerShell script' },
+  { value: 'bat', name: 'Batch', description: 'A Windows batch script' },
+  { value: 'submodule', name: 'Git Submodule', description: 'Import an existing git repository as a submodule' },
+]
+
+export interface CreatePackageResult {
+  packageDir: string
+  startFile: string
+  type: PackageType
+}
 
 export async function createPackage(
   packageName: string,
-  options: { type?: string; url?: string; submodule?: string }
-) {
+  options: { type?: string; submodule?: string }
+): Promise<CreatePackageResult> {
   let type = options.type || 'ts'
-  let url = options.url
+  let url: string | undefined
 
   if (options.submodule) {
     type = 'submodule'
     url = options.submodule
   }
 
-  const packagesDir = join(process.cwd(), 'packages')
+  // Always resolve paths relative to the CSM repo root, not cwd
+  const rootDir = resolve(import.meta.dir, '..', '..', '..')
+  const packagesDir = join(rootDir, 'packages')
   const packageDir = join(packagesDir, packageName)
   const templatesDir = resolve(import.meta.dir, '..', 'templates')
 
@@ -52,23 +71,20 @@ export async function createPackage(
     await applyTemplate('bat.build.ts', 'build.ts')
     startFile = `${packageName}.bat`
   } else if (type === 'rust') {
-    const srcDir = join(packageDir, 'src')
-    await mkdir(srcDir, { recursive: true })
-
-    // Initialize cargo project
-    await $`cargo init --bin --name ${packageName}`.cwd(srcDir)
+    // Initialize cargo project in package root (cargo creates its own 'src' directory)
+    await $`cargo init --bin --name ${packageName}`.cwd(packageDir)
 
     await applyTemplate('rust.build.ts', 'build.ts')
     startFile = `src/main.rs`
-    console.log(`\x1b[32mCreated ${join(srcDir, 'main.rs')}\x1b[0m`)
+    console.log(`\x1b[32mCreated ${join(packageDir, 'src', 'main.rs')}\x1b[0m`)
   } else if (type === 'submodule') {
     if (!url) {
-      throw new Error('Error: --url or --submodule is required for submodule type.')
+      throw new Error('Error: --submodule <url> is required for submodule type.')
     }
 
     console.log(`Adding submodule from ${url}...`)
     const submodulePath = `packages/${packageName}/src`
-    await $`git submodule add ${url} ${submodulePath}`.cwd(process.cwd())
+    await $`git submodule add ${url} ${submodulePath}`.cwd(rootDir)
 
     await applyTemplate('submodule.build.ts', 'build.ts')
     startFile = `build.ts`
@@ -86,9 +102,90 @@ export async function createPackage(
 
   console.log(`\nAdded new script '${packageName}'`)
   const startFilePath = join(packageDir, startFile)
-  const cwd = process.cwd()
-  const relativePath = resolve(startFilePath).replace(resolve(cwd) + '\\', '')
+  const relativePath = resolve(startFilePath).replace(resolve(rootDir) + '\\', '').replace(resolve(rootDir) + '/', '')
   console.log(`Start by editing ${relativePath}`)
+
+  return {
+    packageDir,
+    startFile,
+    type: type as PackageType,
+  }
+}
+
+export async function runInteractiveWizard(existingName?: string): Promise<{
+  packageName: string
+  type: PackageType
+  submoduleUrl?: string
+}> {
+  let packageName = existingName
+  
+  if (!packageName) {
+    packageName = await input({
+      message: 'Package name:',
+      validate: (value) => {
+        if (!value.trim()) return 'Package name is required'
+        if (!/^[a-z0-9-]+$/i.test(value)) return 'Package name must be alphanumeric with dashes only'
+        return true
+      },
+    })
+  }
+
+  const type = await select<PackageType>({
+    message: 'Select package type:',
+    choices: PACKAGE_TYPES.map((t) => ({
+      value: t.value,
+      name: t.name,
+      description: t.description,
+    })),
+  })
+
+  let submoduleUrl: string | undefined
+  if (type === 'submodule') {
+    submoduleUrl = await input({
+      message: 'Git repository URL:',
+      validate: (value) => {
+        if (!value.trim()) return 'URL is required for submodules'
+        return true
+      },
+    })
+  }
+
+  return { packageName, type, submoduleUrl }
+}
+
+export async function promptOpenEditor(result: CreatePackageResult): Promise<void> {
+  const openEditor = await confirm({
+    message: 'Open the created file in an editor?',
+    default: true,
+  })
+
+  if (!openEditor) return
+
+  const editor = await select<'vscode' | 'neovim' | 'none'>({
+    message: 'Select editor:',
+    choices: [
+      { value: 'vscode', name: 'VS Code', description: 'Open folder and select file' },
+      { value: 'neovim', name: 'Neovim', description: 'Open file directly' },
+      { value: 'none', name: 'Cancel', description: 'Do not open' },
+    ],
+  })
+
+  if (editor === 'none') return
+
+  const filePath = join(result.packageDir, result.startFile)
+
+  if (editor === 'vscode') {
+    // Open folder in VS Code and go to the file
+    await $`code ${result.packageDir} --goto ${filePath}`
+  } else if (editor === 'neovim') {
+    // Open file in Neovim
+    const nvim = Bun.spawn(['nvim', filePath], {
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
+    await nvim.exited
+  }
 }
 
 if (import.meta.main) {
@@ -100,9 +197,6 @@ if (import.meta.main) {
         short: 't',
         default: 'ts',
       },
-      url: {
-        type: 'string',
-      },
       submodule: {
         type: 'string',
       },
@@ -111,16 +205,36 @@ if (import.meta.main) {
     allowPositionals: true,
   })
 
-  const packageName = positionals[0]
-  if (!packageName) {
-    console.error('Please provide a package name.')
-    console.error('Usage: bun new <name> [-t <type>] [--url <url>]')
-    console.error('       bun new <name> --submodule <url>')
-    process.exit(1)
+  let packageName = positionals[0]
+  let options = values
+
+  // Check if type was explicitly provided
+  const explicitlyTyped = Bun.argv.some(arg => arg === '-t' || arg.startsWith('--type') || arg.startsWith('--submodule'))
+
+  // Run wizard if no package name OR if type was not explicitly provided
+  if (!packageName || !explicitlyTyped) {
+    try {
+      const wizard = await runInteractiveWizard(packageName)
+      packageName = wizard.packageName
+      options = {
+        type: wizard.type,
+        submodule: wizard.submoduleUrl,
+      }
+    } catch (e: any) {
+      // User cancelled (Ctrl+C)
+      if (e.name === 'ExitPromptError') {
+        process.exit(0)
+      }
+      throw e
+    }
   }
 
   try {
-    await createPackage(packageName, values)
+    const result = await createPackage(packageName, options)
+    // If user explicitly provided -t or --submodule, skip the editor prompt
+    if (!explicitlyTyped) {
+      await promptOpenEditor(result)
+    }
   } catch (e: any) {
     console.error(e.message)
     process.exit(1)
